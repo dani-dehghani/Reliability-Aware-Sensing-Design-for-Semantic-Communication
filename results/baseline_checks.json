@@ -1,0 +1,48 @@
+{
+  "config": {
+    "seed": 2026,
+    "C": 4,
+    "a_r": 1.0,
+    "a_v": 1.0,
+    "sigma0_sq": 1.0,
+    "eps": 0.1,
+    "p_r": 0.1,
+    "p_v": 0.1,
+    "p_hat_low": 0.02,
+    "n_alpha": 101,
+    "n_mc": 200000
+  },
+  "all_pass": true,
+  "checks": [
+    {
+      "name": "rows of S_u, W, W_hat sum to 1",
+      "max_error": 2.220446049250313e-16,
+      "tolerance": 1e-12,
+      "pass": true
+    },
+    {
+      "name": "all posterior vectors sum to 1",
+      "max_error": 2.220446049250313e-16,
+      "tolerance": 1e-12,
+      "pass": true
+    },
+    {
+      "name": "L_mis = 0 when W = W_hat",
+      "max_error": 0.0,
+      "tolerance": 1e-12,
+      "pass": true
+    },
+    {
+      "name": "exact identity agrees with direct distance",
+      "max_error": 6.071532165918825e-18,
+      "tolerance": 1e-10,
+      "pass": true
+    },
+    {
+      "name": "balanced trace agrees with exact identity",
+      "max_error": 3.903127820947816e-18,
+      "tolerance": 1e-10,
+      "pass": true
+    }
+  ]
+}
