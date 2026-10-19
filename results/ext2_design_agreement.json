@@ -1,0 +1,100 @@
+[
+  {
+    "regime": "near_boundary",
+    "epsilon": 0.01,
+    "alpha_real": 1.0,
+    "alpha_spec": 1.0,
+    "agree": true
+  },
+  {
+    "regime": "near_boundary",
+    "epsilon": 0.03,
+    "alpha_real": 1.0,
+    "alpha_spec": 1.0,
+    "agree": true
+  },
+  {
+    "regime": "near_boundary",
+    "epsilon": 0.06,
+    "alpha_real": 1.0,
+    "alpha_spec": 1.0,
+    "agree": true
+  },
+  {
+    "regime": "near_boundary",
+    "epsilon": 0.1,
+    "alpha_real": 1.0,
+    "alpha_spec": 1.0,
+    "agree": true
+  },
+  {
+    "regime": "near_boundary",
+    "epsilon": 0.15,
+    "alpha_real": 1.0,
+    "alpha_spec": 1.0,
+    "agree": true
+  },
+  {
+    "regime": "near_boundary",
+    "epsilon": 0.2,
+    "alpha_real": 0.0,
+    "alpha_spec": 1.0,
+    "agree": false
+  },
+  {
+    "regime": "near_boundary",
+    "epsilon": 0.25,
+    "alpha_real": 1.0,
+    "alpha_spec": 1.0,
+    "agree": true
+  },
+  {
+    "regime": "interior",
+    "epsilon": 0.01,
+    "alpha_real": 1.0,
+    "alpha_spec": 1.0,
+    "agree": true
+  },
+  {
+    "regime": "interior",
+    "epsilon": 0.03,
+    "alpha_real": 1.0,
+    "alpha_spec": 1.0,
+    "agree": true
+  },
+  {
+    "regime": "interior",
+    "epsilon": 0.06,
+    "alpha_real": 1.0,
+    "alpha_spec": 1.0,
+    "agree": true
+  },
+  {
+    "regime": "interior",
+    "epsilon": 0.1,
+    "alpha_real": 1.0,
+    "alpha_spec": 1.0,
+    "agree": true
+  },
+  {
+    "regime": "interior",
+    "epsilon": 0.15,
+    "alpha_real": 1.0,
+    "alpha_spec": 1.0,
+    "agree": true
+  },
+  {
+    "regime": "interior",
+    "epsilon": 0.2,
+    "alpha_real": 1.0,
+    "alpha_spec": 1.0,
+    "agree": true
+  },
+  {
+    "regime": "interior",
+    "epsilon": 0.25,
+    "alpha_real": 1.0,
+    "alpha_spec": 1.0,
+    "agree": true
+  }
+]
