@@ -1,4 +1,3 @@
-
 import numpy as np
 
 _H2 = np.array([[1.0, 1.0], [1.0, -1.0]]) / np.sqrt(2.0)
@@ -47,8 +46,20 @@ def L_mis_modes(S, dW, atol=1e-8):
 
 
 def worst_case_spectral(S, delta):
-    # sup over {G >= 0, G@1 = 0, tr(G) <= delta} of L_mis(u) = (delta/C) * lambda_max(G_s)
     C = S.shape[0]
     Gs = Gs_matrix(S)
     lam_max = np.linalg.eigvalsh(Gs).max()
     return float(delta / C * lam_max)
+
+
+def GW_matrix(W):
+    C = W.shape[0]
+    K = W - uninformative_experiment(C)
+    return K @ K.T
+
+
+def R_task_trace(S, W):
+    C = S.shape[0]
+    Gs = Gs_matrix(S)
+    Gw = GW_matrix(W)
+    return float(np.trace(Gs @ Gw) / C)
