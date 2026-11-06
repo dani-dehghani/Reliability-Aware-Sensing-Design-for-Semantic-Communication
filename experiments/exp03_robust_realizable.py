@@ -16,10 +16,10 @@ ROOT = Path(__file__).resolve().parents[1]
 EPS_GRID = [0.01, 0.03, 0.06, 0.10, 0.15, 0.20, 0.25]
 ALPHAS = [0.0, 0.5, 1.0]
 REGIMES = {
-    "near_boundary": dict(p_r=0.10, p_v=0.10, p_low=0.02),   # same channel as the baseline
+    "near_boundary": dict(p_r=0.10, p_v=0.10, p_low=0.02),   
     "interior": dict(p_r=0.30, p_v=0.30, p_low=0.10),
 }
-ARGS = (1.0, 1.0, 1.0, 0.1)  # a_r, a_v, sigma0_sq, eps -- same as baseline.json
+ARGS = (1.0, 1.0, 1.0, 0.1)  
 
 
 def save(name, payload):
@@ -30,8 +30,6 @@ def save(name, payload):
 
 
 def check_projection_validity():
-    # Section 5.2 item 8: projected adversarial channels must stay nonnegative
-    # and row-stochastic
     rng = np.random.default_rng(2026)
     bad = 0
     for _ in range(200):
@@ -73,21 +71,26 @@ def summarize(rows):
         print("   requires row-stochastic, which is strictly larger.")
 
 
-def design_agreement(rows):
-    # for each (regime, epsilon), do L_real_wc and L_spec_wc pick the same alpha?
+def design_agreement(rows, tie_tol=1e-12):
+    # robust design = the alpha with the SMALLEST worst-case loss (argmin).
+    # L_spec is orientation-blind: alpha=0 and alpha=1 tie up to floating-point
+    # noise, so ties are detected explicitly and reported rather than broken arbitrarily.
     results = []
     for regime_name in REGIMES:
         for eps in EPS_GRID:
             subset = [r for r in rows if r["regime"] == regime_name and r["epsilon"] == eps]
-            best_real = max(subset, key=lambda r: r["L_real_wc"])
-            best_spec = max(subset, key=lambda r: r["L_spec_wc"])
+            real_min = min(r["L_real_wc"] for r in subset)
+            spec_min = min(r["L_spec_wc"] for r in subset)
+            alpha_real = sorted(r["alpha"] for r in subset if r["L_real_wc"] <= real_min + tie_tol)
+            alpha_spec = sorted(r["alpha"] for r in subset if r["L_spec_wc"] <= spec_min + tie_tol)
             results.append({
                 "regime": regime_name, "epsilon": eps,
-                "alpha_real": best_real["alpha"], "alpha_spec": best_spec["alpha"],
-                "agree": best_real["alpha"] == best_spec["alpha"],
+                "alpha_safest_real": alpha_real, "alpha_safest_spec": alpha_spec,
+                "spec_has_tie": len(alpha_spec) > 1,
+                "agree": bool(set(alpha_real) & set(alpha_spec)),
             })
     n_agree = sum(1 for r in results if r["agree"])
-    print(f"4. Design agreement: the two criteria pick the same alpha in {n_agree}/{len(results)} cases")
+    print(f"4. Design agreement (safest alpha by argmin): {n_agree}/{len(results)} cases")
     save("ext2_design_agreement.json", results)
 
 
