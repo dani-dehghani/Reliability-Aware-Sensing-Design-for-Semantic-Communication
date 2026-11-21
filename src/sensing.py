@@ -21,7 +21,7 @@ def _check_alpha(alpha):
 
 
 def variances(alpha, sigma0_sq, eps):
-    # sigma_r^2 and sigma_v^2 as a function of the sensing allocation alpha
+    
     a = _check_alpha(alpha)
     return sigma0_sq / (eps + a), sigma0_sq / (eps + 1.0 - a)
 
@@ -32,7 +32,7 @@ def covariance(alpha, sigma0_sq, eps):
 
 
 def likelihood(y, x, mu, Sigma):
-    # Gaussian density f(y | x), y can be a single point or a batch (n, d)
+    
     y = np.atleast_2d(y)
     diff = y - mu[x]
     d = mu.shape[1]
@@ -48,7 +48,6 @@ def sample(x, n, mu, Sigma, rng):
 
 
 def bit_reliability(alpha, a_r, a_v, sigma0_sq, eps):
-    # P(sign of each component is correct); used only to sanity-check parameters,
-    # not the actual token distribution (see semantic.py for that)
+    
     var_r, var_v = variances(alpha, sigma0_sq, eps)
     return ndtr(a_r / np.sqrt(var_r)), ndtr(a_v / np.sqrt(var_v))

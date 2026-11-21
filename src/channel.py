@@ -1,4 +1,3 @@
-
 import numpy as np
 
 MODES = ("matched", "range_optimistic", "velocity_optimistic")
@@ -12,17 +11,12 @@ def bsc(p):
 
 
 def actual_channel(p_r, p_v):
-    # deployment channel W = B(p_r) kron B(p_v)
+    
     return np.kron(bsc(p_r), bsc(p_v))
 
 
 def nominal_channel(p_r, p_v, mode, p_hat_low):
-    """Receiver's assumed channel.
-
-    matched              -> W_hat = W
-    range_optimistic     -> receiver underestimates the range flip probability
-    velocity_optimistic  -> receiver underestimates the velocity flip probability
-    """
+    
     if mode == "matched":
         return actual_channel(p_r, p_v)
     if mode == "range_optimistic":

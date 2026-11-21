@@ -1,14 +1,3 @@
-"""
-Baseline experiment for the reliability-aware sensing project.
-
-Runs the full pipeline: sensing model, semantic extraction, channel models,
-posteriors, mismatch loss (checked two independent ways), the balanced
-spectral form, a full check gate, and the orientation-control sweep that
-produces Figure 2.
-
-Run from the project root:
-    python -m experiments.exp00_baseline
-"""
 import json
 from pathlib import Path
 
@@ -19,11 +8,11 @@ import numpy as np
 
 from src.channel import actual_channel, delta_W, nominal_channel
 from src.design import alpha_sweep, build_control_table, format_markdown_table, select_control_pair
-from src.metrics import L_mis_direct, L_mis_identity, bayes_risk, hard_accuracy
+from src.metrics import L_mis_direct, L_mis_identity, hard_accuracy
 from src.posterior import end_to_end, hard_decision, posterior
 from src.semantic import analytic_S, empirical_S
 from src.sensing import bit_reliability, uniform_prior, variances
-from src.sensitivity import Gdelta_matrix, Gs_matrix, L_mis_modes, L_mis_trace, worst_case_spectral
+from src.sensitivity import Gdelta_matrix, L_mis_modes, L_mis_trace, worst_case_spectral
 
 ROOT = Path(__file__).resolve().parents[1]
 MODES = ("range_optimistic", "velocity_optimistic")
@@ -221,7 +210,7 @@ def make_figure_and_table(cfg):
 
     ax1.plot(alpha, accuracy, color="black")
     ax1.set_ylabel("hard accuracy (matched receiver)")
-    ax1.set_title("Orientation control")
+    ax1.set_title("Orientation control: same accuracy, different mismatch loss")
     ax1.grid(alpha=0.3)
 
     ax2.plot(alpha, l_range, label="range-optimistic receiver", color="tab:red")
@@ -232,11 +221,11 @@ def make_figure_and_table(cfg):
     y_top = max(l_range.max(), l_vel.max())
     ax2.set_ylim(top=y_top * 1.18)
     mid_alpha, mid_loss = (a_lo + a_hi) / 2, (l_lo + l_hi) / 2
-    ax2.annotate(f"{pair['l_mis_ratio']:.2f}x", xy=(mid_alpha, mid_loss),
+    ax2.annotate(f"L_mis ratio {pair['l_mis_ratio']:.2f}x",xy=(mid_alpha, mid_loss),
                 xytext=(mid_alpha, y_top * 1.08), ha="center", fontsize=10, fontweight="bold")
     ax2.set_xlabel("sensing allocation alpha (0 = velocity-precise, 1 = range-precise)")
-    ax2.set_ylabel("L_mis")
-    ax2.legend(fontsize=8)
+    ax2.set_ylabel("mismatch loss L_mis")
+    ax2.legend(fontsize=8, loc="lower center")
     ax2.grid(alpha=0.3)
 
     fig.tight_layout()
