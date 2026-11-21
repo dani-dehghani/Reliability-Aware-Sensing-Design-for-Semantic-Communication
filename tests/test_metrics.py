@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 
 import numpy as np
-import pytest
 
 from src.channel import actual_channel, delta_W, nominal_channel
 from src.metrics import (L_mis_direct, L_mis_identity, bayes_risk, brier_loss,

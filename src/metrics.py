@@ -43,12 +43,12 @@ def exact_brier_of_mismatched_receiver(pi, rho_true, rho_hat, A_true):
 
 
 def prior_risk(pi):
-    # Brier risk of a receiver that ignores M and always reports the prior
+   
     return float(1.0 - np.sum(pi ** 2))
 
 
 def R_task_direct(pi, rho_true, A_true):
-    # reduction in matched Bayes risk relative to always reporting the prior (eq. 55)
+   
     return float(prior_risk(pi) - bayes_risk(pi, rho_true, A_true))
 
 
@@ -58,3 +58,34 @@ def V_prob(R_task, L_mis):
 
 def J_lambda(R_task, L_mis, lam):
     return float(R_task - lam * L_mis)
+
+
+
+
+def floor_probabilities(q, floor):
+    
+    q = np.maximum(np.asarray(q, dtype=float), floor)
+    return q / q.sum(axis=0, keepdims=True)
+
+
+def kl_divergence(p, q):
+   
+    p, q = np.asarray(p, dtype=float), np.asarray(q, dtype=float)
+    mask = p > 0
+    if np.any(q[mask] <= 0):
+        return float("inf")
+    return float(np.sum(p[mask] * np.log(p[mask] / q[mask])))
+
+
+def L_log(pi, rho_true, rho_hat, A_true, floor=None):
+    
+    p = np.asarray(pi) @ A_true
+    if floor is not None:
+        rho_hat = floor_probabilities(rho_hat, floor)
+    return float(sum(p[m] * kl_divergence(rho_true[:, m], rho_hat[:, m]) for m in range(len(p)) if p[m] > 0))
+
+
+def info_log(pi, rho_true, A_true):
+    
+    p = np.asarray(pi) @ A_true
+    return float(sum(p[m] * kl_divergence(rho_true[:, m], pi) for m in range(len(p)) if p[m] > 0))
