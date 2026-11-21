@@ -63,3 +63,37 @@ def R_task_trace(S, W):
     Gs = Gs_matrix(S)
     Gw = GW_matrix(W)
     return float(np.trace(Gs @ Gw) / C)
+
+
+
+
+def Q_blocks(S, pi, W):
+    
+    S, W, pi = np.asarray(S, float), np.asarray(W, float), np.asarray(pi, float)
+    A = S @ W
+    p = pi @ A
+    if np.any(p <= 0):
+        raise ValueError("a received symbol has zero evidence; Q_u is undefined")
+    rho = (pi[:, None] * A) / p[None, :]
+    D_pi = np.diag(pi)
+    blocks = np.empty((W.shape[1], S.shape[1], S.shape[1]))
+    for m in range(W.shape[1]):
+        B_m = (D_pi - np.outer(rho[:, m], pi)) @ S
+        blocks[m] = B_m.T @ B_m / p[m]
+    return blocks
+
+
+def Q_matrix(S, pi, W):
+    
+    blocks = Q_blocks(S, pi, W)
+    L, K, _ = blocks.shape
+    Q = np.zeros((K * L, K * L))
+    for m in range(L):
+        Q[m * K:(m + 1) * K, m * K:(m + 1) * K] = blocks[m]
+    return Q
+
+
+def L_mis_quadratic(S, pi, W, dW):
+    blocks = Q_blocks(S, pi, W)
+    dW = np.asarray(dW, float)
+    return float(sum(dW[:, m] @ blocks[m] @ dW[:, m] for m in range(dW.shape[1])))

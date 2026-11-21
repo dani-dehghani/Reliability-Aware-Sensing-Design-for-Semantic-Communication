@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 
 import numpy as np
-import pytest
 
 from src.channel import actual_channel, delta_W, nominal_channel
 from src.metrics import L_mis_direct, L_mis_identity
@@ -120,9 +119,7 @@ def test_spectral_bound_increases_with_delta():
 
 
 def test_spectral_bound_is_symmetric_under_alpha_swap_but_L_mis_is_not():
-    # lambda_max(Gs) is the same at alpha and 1-alpha (S(alpha) and S(1-alpha) differ
-    # only by a permutation), and Delta_W doesn't depend on alpha at all here, so the
-    # eq. (52) bound is identical at both ends even though the true loss is not.
+    
     S0, dW0, *_ = _pieces(0.0, "range_optimistic")
     S1, dW1, *_ = _pieces(1.0, "range_optimistic")
     assert np.allclose(dW0, dW1, atol=1e-14)
