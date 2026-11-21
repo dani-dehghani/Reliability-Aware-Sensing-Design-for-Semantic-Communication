@@ -2,8 +2,11 @@ import numpy as np
 import pytest
 
 from src.channel import actual_channel
-from src.design import alpha_star_map, mixed_l_mis, pareto_selection, task_vs_mismatch_sweep
-from src.metrics import J_lambda, R_task_direct, V_prob, bayes_risk, prior_risk
+from src.design import (
+    alpha_star_map, argmax_with_ties, mixed_l_mis, pareto_front_mask, pareto_selection,
+    task_vs_mismatch_sweep,
+)
+from src.metrics import J_lambda, R_task_direct, V_prob, prior_risk
 from src.posterior import end_to_end, posterior
 from src.semantic import analytic_S
 from src.sensitivity import GW_matrix, Gs_matrix, R_task_trace
@@ -32,7 +35,7 @@ def test_r_task_direct_matches_trace_formula():
 
 
 def test_r_task_is_zero_for_uninformative_channel():
-    # W = J (every row equal to the prior) carries no information at all
+    
     C = 4
     J = np.full((C, C), 1.0 / C)
     S = analytic_S(0.5, CFG["a_r"], CFG["a_v"], CFG["sigma0_sq"], CFG["eps"])
@@ -60,13 +63,50 @@ def test_pareto_selection_runs_and_picks_are_within_range():
 
 
 def test_j_lambda_zero_equals_r_task():
-    # J_lambda at lambda=0 should reduce to R_task exactly (eq. 60)
     assert J_lambda(0.1110, 0.0024, lam=0.0) == pytest.approx(0.1110)
 
 
 def test_v_prob_equals_j_lambda_at_lambda_one():
     r, l = 0.1110, 0.0024
     assert V_prob(r, l) == pytest.approx(J_lambda(r, l, lam=1.0))
+
+
+def test_argmax_with_ties_reports_exact_ties_only():
+    assert argmax_with_ties([0.1, 0.3, 0.2, 0.3]) == (1, [1, 3])
+    assert argmax_with_ties([0.1, 0.3, 0.3 - 1e-6]) == (1, [1])
+
+
+def test_pareto_front_mask_drops_dominated_points():
+    R = np.array([1.0, 2.0, 2.0, 1.5])
+    L = np.array([1.0, 2.0, 3.0, 2.5])
+    # point 2 is dominated by 1 (same R, more L); point 3 by 1 (less R, more L)
+    assert pareto_front_mask(R, L).tolist() == [True, True, False, False]
+
+
+def test_sweep_trace_and_lambda_max_columns_match_gs():
+    sweep = task_vs_mismatch_sweep(CFG)
+    args = (CFG["a_r"], CFG["a_v"], CFG["sigma0_sq"], CFG["eps"])
+    for i, a in enumerate(sweep["alpha"]):
+        Gs = Gs_matrix(analytic_S(a, *args))
+        assert sweep["tr_Gs"][i] == pytest.approx(np.trace(Gs))
+        assert sweep["lam_max_Gs"][i] == pytest.approx(np.linalg.eigvalsh(Gs).max())
+        assert sweep["lam_max_Gs"][i] <= sweep["tr_Gs"][i] + 1e-12
+
+
+def test_symmetric_mismatch_tie_is_reported_not_broken():
+    
+    sweep = task_vs_mismatch_sweep(CFG)
+    picks = pareto_selection(sweep, lambda_grid=[], q=0.5)["picks"]
+    assert picks["min_L_mis"]["alpha_ties"] == [0.0, 1.0]
+
+
+def test_range_mismatch_moves_alpha_star_toward_velocity_as_lambda_grows():
+    sweep = task_vs_mismatch_sweep(CFG)
+    rows = alpha_star_map(sweep, [0.0, 5.0, 10.0, 100.0], [1.0])
+    a_star = [r["alpha_star"] for r in rows]
+    assert a_star[0] == pytest.approx(0.5)
+    assert all(x >= y for x, y in zip(a_star, a_star[1:]))
+    assert a_star[-1] < 0.5
 
 
 def test_alpha_star_map_covers_full_grid():

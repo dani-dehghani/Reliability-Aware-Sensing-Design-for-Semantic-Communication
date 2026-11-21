@@ -4,6 +4,7 @@ from src.channel import actual_channel, nominal_channel
 from src.metrics import L_mis_direct, R_task_direct, hard_accuracy
 from src.posterior import end_to_end, posterior
 from src.semantic import analytic_S
+from src.sensitivity import Gs_matrix
 
 
 def alpha_sweep(cfg, receiver_modes=("range_optimistic", "velocity_optimistic")):
@@ -69,12 +70,8 @@ def format_markdown_table(rows, headers=("Metric", "Design 1", "Design 2")):
     return "\n".join(lines)
 
 
-# ---- Extension 1: task informativeness vs. mismatch vulnerability ----
-
 def task_vs_mismatch_sweep(cfg):
-    """Same alpha sweep as above, plus R_task alongside both L_mis directions
-    (eq. 55 / 63). Kept as a separate function from alpha_sweep so the
-    baseline script doesn't pick up the extra R_task column."""
+    # same sweep as alpha_sweep, plus R_task and the G_s spectrum
     args = (cfg["a_r"], cfg["a_v"], cfg["sigma0_sq"], cfg["eps"])
     p_r, p_v, p_low = cfg["p_r"], cfg["p_v"], cfg["p_hat_low"]
     pi = np.full(cfg["C"], 1.0 / cfg["C"])
@@ -83,6 +80,8 @@ def task_vs_mismatch_sweep(cfg):
 
     accuracy = np.zeros_like(alphas)
     R_task = np.zeros_like(alphas)
+    tr_Gs = np.zeros_like(alphas)
+    lam_max_Gs = np.zeros_like(alphas)
     l_mis = {"range_optimistic": np.zeros_like(alphas), "velocity_optimistic": np.zeros_like(alphas)}
 
     for i, a in enumerate(alphas):
@@ -91,67 +90,90 @@ def task_vs_mismatch_sweep(cfg):
         rho = posterior(pi, A)
         accuracy[i] = hard_accuracy(pi, rho, A)
         R_task[i] = R_task_direct(pi, rho, A)
+        Gs = Gs_matrix(S)
+        tr_Gs[i] = np.trace(Gs)
+        lam_max_Gs[i] = np.linalg.eigvalsh(Gs).max()
         for mode in l_mis:
             W_hat = nominal_channel(p_r, p_v, mode, p_low)
             A_hat = end_to_end(S, W_hat)
             rho_hat = posterior(pi, A_hat)
             l_mis[mode][i] = L_mis_direct(pi, rho, rho_hat, A)
 
-    out = {"alpha": alphas, "accuracy": accuracy, "R_task": R_task}
+    out = {"alpha": alphas, "accuracy": accuracy, "R_task": R_task, "tr_Gs": tr_Gs, "lam_max_Gs": lam_max_Gs}
     out.update({f"L_mis_{mode}": arr for mode, arr in l_mis.items()})
     return out
 
 
+def argmax_with_ties(values, rtol=1e-9):
+    
+    v = np.asarray(values, dtype=float)
+    best = v.max()
+    tol = rtol * max(abs(best), 1e-300)
+    ties = np.flatnonzero(v >= best - tol)
+    return int(ties[0]), [int(i) for i in ties]
+
+
+def pareto_front_mask(R_task, L_mis):
+   
+    R, L = np.asarray(R_task), np.asarray(L_mis)
+    mask = np.ones(len(R), dtype=bool)
+    for i in range(len(R)):
+        dominated = (R >= R[i]) & (L <= L[i]) & ((R > R[i]) | (L < L[i]))
+        mask[i] = not dominated.any()
+    return mask
+
+
 def mixed_l_mis(l_mis_range, l_mis_velocity, q):
-    """eq. 64: q is the probability the deployment mismatch is range-oriented.
-    q=1 -> pure range-oriented, q=0 -> pure velocity-oriented, q=0.5 -> the
-    uncertain/mixed case. These three settings cover the three mismatch
-    cases the guideline asks for in 3.1.3."""
+    
     return q * l_mis_range + (1.0 - q) * l_mis_velocity
 
 
 def pareto_selection(sweep, lambda_grid, q=0.5):
-    """Runs the 5 competing design rules from eq. 63/3.1.3 over the same
-    sweep and reports which alpha each one picks."""
+    # which alpha each design rule picks on the same sweep
     alpha = sweep["alpha"]
     R_task = sweep["R_task"]
     l_mix = mixed_l_mis(sweep["L_mis_range_optimistic"], sweep["L_mis_velocity_optimistic"], q)
     v_prob = R_task - l_mix
+    j_lambda = {f"{lam:g}": R_task - lam * l_mix for lam in lambda_grid}
 
     picks = {
-        "max_accuracy": int(np.argmax(sweep["accuracy"])),
-        "max_R_task": int(np.argmax(R_task)),
-        "min_L_mis": int(np.argmin(l_mix)),
-        "max_V_prob": int(np.argmax(v_prob)),
+        "max_accuracy": argmax_with_ties(sweep["accuracy"]),
+        "max_R_task": argmax_with_ties(R_task),
+        "min_L_mis": argmax_with_ties(-l_mix),
+        "max_V_prob": argmax_with_ties(v_prob),
     }
     for lam in lambda_grid:
-        j = R_task - lam * l_mix
-        picks[f"max_J_lambda_{lam:g}"] = int(np.argmax(j))
+        picks[f"max_J_lambda_{lam:g}"] = argmax_with_ties(j_lambda[f"{lam:g}"])
 
     return {
         "q": q,
         "L_mis_mixed": l_mix,
         "V_prob": v_prob,
+        "J_lambda": j_lambda,
+        "pareto_front": pareto_front_mask(R_task, l_mix),
         "picks": {
             name: {
                 "alpha": float(alpha[i]),
+                "alpha_ties": [float(alpha[k]) for k in ties],
                 "accuracy": float(sweep["accuracy"][i]),
                 "R_task": float(R_task[i]),
                 "L_mis": float(l_mix[i]),
             }
-            for name, i in picks.items()
+            for name, (i, ties) in picks.items()
         },
     }
 
 
 def alpha_star_map(sweep, lambda_grid, q_grid):
-    """Figure 4: for each (q, lambda), which alpha maximizes J_lambda."""
+    
     R_task, alpha = sweep["R_task"], sweep["alpha"]
     rows = []
     for q in q_grid:
         l_mix = mixed_l_mis(sweep["L_mis_range_optimistic"], sweep["L_mis_velocity_optimistic"], q)
         for lam in lambda_grid:
-            j = R_task - lam * l_mix
-            i_star = int(np.argmax(j))
-            rows.append({"q": float(q), "lambda": float(lam), "alpha_star": float(alpha[i_star])})
+            i_star, ties = argmax_with_ties(R_task - lam * l_mix)
+            rows.append({"q": float(q), "lambda": float(lam), "alpha_star": float(alpha[i_star]),
+                         "alpha_star_ties": [float(alpha[k]) for k in ties], "tie": len(ties) > 1,
+                         "accuracy": float(sweep["accuracy"][i_star]),
+                         "R_task": float(R_task[i_star]), "L_mis": float(l_mix[i_star])})
     return rows
