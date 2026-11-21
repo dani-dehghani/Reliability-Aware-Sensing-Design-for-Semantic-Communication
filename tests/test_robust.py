@@ -2,7 +2,10 @@ import numpy as np
 import pytest
 
 from src.channel import nominal_channel
-from src.robust import L_real_wc, l_mis_of_candidate, project_channel, project_row_to_simplex
+from src.robust import (
+    L_real_wc, feasible_direction, is_valid_channel, project_channel,
+    project_doubly_stochastic, project_row_to_simplex, project_to_set,
+)
 from src.semantic import analytic_S
 from src.sensitivity import worst_case_spectral
 
@@ -22,8 +25,6 @@ def test_simplex_projection_fixes_negative_and_wrong_sum():
 
 
 def test_project_channel_rows_stay_valid_for_random_input():
-    # Section 5.2 item 8: projected adversarial channels must stay
-    # nonnegative and row-stochastic
     rng = np.random.default_rng(0)
     for _ in range(100):
         W = rng.normal(size=(4, 4))
@@ -51,51 +52,67 @@ def test_l_real_wc_increases_with_radius():
     assert large > small
 
 
-def test_spectral_bound_holds_for_doubly_stochastic_restricted_search():
-    # eq. 70 is explicitly derived under the "balanced assumptions" (S_u, W,
-    # W_hat all doubly stochastic). It should hold once the adversarial
-    # search is restricted back to (approximately) doubly-stochastic
-    # channels -- confirms the mechanism behind the unrestricted violation
-    # seen in exp03.
-    def sinkhorn(W, n_iter=40):
-        W = W.copy()
-        for _ in range(n_iter):
-            W = W / W.sum(axis=1, keepdims=True)
-            W = W / W.sum(axis=0, keepdims=True)
-        return W / W.sum(axis=1, keepdims=True)
+def test_doubly_projection_is_valid_and_idempotent():
+    rng = np.random.default_rng(4)
+    for _ in range(100):
+        P = project_doubly_stochastic(rng.normal(0.25, 0.4, size=(4, 4)))
+        assert is_valid_channel(P, "doubly")
+        assert np.allclose(project_doubly_stochastic(P), P, atol=1e-10)
 
-    rng = np.random.default_rng(3)
+
+def test_doubly_projection_is_the_nearest_point():
+    # compare against a generic constrained solver
+    from scipy.optimize import minimize
+    rng = np.random.default_rng(5)
+    cons = [{"type": "eq", "fun": lambda w: w.reshape(4, 4).sum(1) - 1},
+            {"type": "eq", "fun": lambda w: w.reshape(4, 4).sum(0)[:3] - 1}]
+    for _ in range(5):
+        X = rng.normal(0.25, 0.3, size=(4, 4))
+        ref = minimize(lambda w: np.sum((w - X.ravel()) ** 2), np.full(16, 0.25), constraints=cons,
+                       bounds=[(0, None)] * 16, method="SLSQP", options={"ftol": 1e-14, "maxiter": 500})
+        assert np.sum((project_doubly_stochastic(X) - X) ** 2) <= ref.fun + 1e-9
+
+
+def test_feasible_direction_has_zero_row_and_column_sums():
+    D = np.random.default_rng(6).normal(size=(4, 4))
+    assert np.allclose(feasible_direction(D, "row").sum(axis=1), 0.0)
+    Dd = feasible_direction(D, "doubly")
+    assert np.allclose(Dd.sum(axis=1), 0.0) and np.allclose(Dd.sum(axis=0), 0.0)
+
+
+def test_unknown_channel_set_is_rejected():
+    with pytest.raises(ValueError):
+        project_to_set(np.eye(4), "column")
+
+
+@pytest.mark.parametrize("channel_set", ["row", "doubly"])
+def test_search_returns_valid_channel_inside_radius(channel_set):
     pi = np.full(4, 0.25)
-    S = analytic_S(0.5, *CFG_ARGS)
+    S = analytic_S(0.3, *CFG_ARGS)
+    W_hat = nominal_channel(0.10, 0.10, "range_optimistic", 0.02)  # near-boundary nominal
+    eps = 0.2
+    _, _, _, W = L_real_wc(S, W_hat, pi, eps, np.random.default_rng(7), n_trials=200, n_steps=15,
+                           n_restarts=2, channel_set=channel_set, return_candidate=True)
+    assert is_valid_channel(W, channel_set)
+    assert np.linalg.norm(W - W_hat) <= eps + 1e-9
+
+
+@pytest.mark.parametrize("alpha", [0.0, 0.5, 1.0])
+def test_spectral_bound_holds_for_doubly_stochastic_adversary(alpha):
+    # in the doubly-stochastic set the spectral bound is exact, so it cannot be exceeded
+    pi = np.full(4, 0.25)
+    S = analytic_S(alpha, *CFG_ARGS)
     W_hat = nominal_channel(0.10, 0.10, "range_optimistic", 0.02)
     eps = 0.08
-
-    best_ds = 0.0
-    for _ in range(1500):
-        delta = rng.normal(size=(4, 4))
-        delta -= delta.mean(axis=1, keepdims=True)
-        n = np.linalg.norm(delta)
-        if n < 1e-12:
-            continue
-        delta *= eps / n
-        cand = project_channel(W_hat + delta)
-        cand = sinkhorn(cand)
-        d = cand - W_hat
-        n2 = np.linalg.norm(d)
-        if n2 > eps:
-            d *= eps / n2
-            cand = project_channel(W_hat + d)
-            cand = sinkhorn(cand)
-        best_ds = max(best_ds, l_mis_of_candidate(S, W_hat, cand, pi))
-
+    l_real, _, _ = L_real_wc(S, W_hat, pi, eps, np.random.default_rng(3), n_trials=300, n_steps=20,
+                             n_restarts=2, channel_set="doubly")
     l_spec = worst_case_spectral(S, eps ** 2)
-    assert l_spec >= best_ds - 1e-4  # small slack for Sinkhorn/search imprecision
+    assert l_real <= l_spec * (1 + 1e-6)
+    assert l_real >= 0.8 * l_spec  # and the search gets close to it (not a vacuous pass)
 
 
 def test_unrestricted_realizable_search_can_exceed_spectral_bound():
-    # the key finding this extension surfaces: once the adversary is only
-    # required to stay row-stochastic (eq. 65), not doubly stochastic, the
-    # spectral bound (eq. 70) is not guaranteed to hold
+    # a row-stochastic (not doubly stochastic) adversary can beat the spectral bound
     rng = np.random.default_rng(1)
     pi = np.full(4, 0.25)
     S = analytic_S(0.5, *CFG_ARGS)
